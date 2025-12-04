@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 void merge(int *arr, int left, int mid, int right) {
     int n1 = mid - left + 1;
@@ -14,8 +15,7 @@ void merge(int *arr, int left, int mid, int right) {
 
     int i = 0, j = 0, k = left;
     while (i < n1 && j < n2) {
-        if (L[i] <= R[j]) arr[k++] = L[i++];
-        else arr[k++] = R[j++];
+        arr[k++] = (L[i] <= R[j]) ? L[i++] : R[j++];
     }
 
     while (i < n1) arr[k++] = L[i++];
@@ -34,29 +34,37 @@ void merge_sort(int *arr, int left, int right) {
     }
 }
 
+/* ============================================================
+   MASTER PROCESS
+   Sends chunks using MPI_Send, receives sorted chunks with MPI_Recv
+   ============================================================ */
 void master(int n, int size) {
     int *arr = malloc(n * sizeof(int));
-
     srand(42);
-    for (int i = 0; i < n; i++) arr[i] = rand() % 100;
+
+    for (int i = 0; i < n; i++)
+        arr[i] = rand() % 100;
 
     printf("Original array: ");
     for (int i = 0; i < n; i++) printf("%d ", arr[i]);
     printf("\n");
 
     int local_n = n / size;
-    int *local_arr = malloc(local_n * sizeof(int));
 
-    // Scatter pieces of the array
-    MPI_Scatter(arr, local_n, MPI_INT, local_arr, local_n, MPI_INT, 0, MPI_COMM_WORLD);
+    /* Send chunks to workers (rank 1 .. size-1) */
+    for (int rank = 1; rank < size; rank++) {
+        MPI_Send(&arr[rank * local_n], local_n, MPI_INT, rank, 0, MPI_COMM_WORLD);
+    }
 
-    // Sort our own chunk
-    merge_sort(local_arr, 0, local_n - 1);
+    /* Master sorts its own chunk */
+    merge_sort(arr, 0, local_n - 1);
 
-    // Gather back sorted chunks
-    MPI_Gather(local_arr, local_n, MPI_INT, arr, local_n, MPI_INT, 0, MPI_COMM_WORLD);
+    /* Receive sorted chunks back */
+    for (int rank = 1; rank < size; rank++) {
+        MPI_Recv(&arr[rank * local_n], local_n, MPI_INT, rank, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
 
-    // Merge all chunks on master
+    /* Merge chunks */
     int step = local_n;
     while (step < n) {
         for (int i = 0; i + step < n; i += 2 * step) {
@@ -73,9 +81,12 @@ void master(int n, int size) {
     printf("\n");
 
     free(arr);
-    free(local_arr);
 }
 
+/* ============================================================
+   WORKER PROCESS
+   Receives chunk with MPI_Recv, sorts, returns with MPI_Send
+   ============================================================ */
 void worker(int rank, int n) {
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -83,14 +94,14 @@ void worker(int rank, int n) {
     int local_n = n / size;
     int *local_arr = malloc(local_n * sizeof(int));
 
-    // Receive local chunk from scatter
-    MPI_Scatter(NULL, 0, MPI_INT, local_arr, local_n, MPI_INT, 0, MPI_COMM_WORLD);
+    /* Receive chunk from master */
+    MPI_Recv(local_arr, local_n, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    // Sort chunk
+    /* Sort */
     merge_sort(local_arr, 0, local_n - 1);
 
-    // Send back to master
-    MPI_Gather(local_arr, local_n, MPI_INT, NULL, 0, MPI_INT, 0, MPI_COMM_WORLD);
+    /* Send results back */
+    MPI_Send(local_arr, local_n, MPI_INT, 0, 1, MPI_COMM_WORLD);
 
     free(local_arr);
 }
@@ -110,7 +121,7 @@ int main(int argc, char **argv) {
     }
 
     int power = atoi(argv[1]);
-    int n = 1 << power;
+    int n = 1 << power; 
     if (n % size != 0) {
         if (rank == 0)
             printf("Error: array size must be divisible by number of processes\n");
