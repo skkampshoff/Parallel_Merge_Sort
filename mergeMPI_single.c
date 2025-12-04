@@ -43,14 +43,21 @@ void master(int n, int size) {
     srand(42);
 
     for (int i = 0; i < n; i++)
-        arr[i] = rand() % 100;
+        arr[i] = rand();
 
-    printf("Original array: ");
-    for (int i = 0; i < n; i++) printf("%d ", arr[i]);
+    int num_display = n;
+    if (n > 20) {
+        num_display = 10; // Limit output for large arrays
+        printf("Displaying only first 10 elements of each array.\n");
+    }
+
+    printf("Original array:\n");
+    for (int i = 0; i < num_display; i++)
+        printf("%d ", arr[i]);
     printf("\n");
 
     int local_n = n / size;
-
+    double start_time = MPI_Wtime();
     /* Send chunks to workers (rank 1 .. size-1) */
     for (int rank = 1; rank < size; rank++) {
         MPI_Send(&arr[rank * local_n], local_n, MPI_INT, rank, 0, MPI_COMM_WORLD);
@@ -75,11 +82,13 @@ void master(int n, int size) {
         }
         step *= 2;
     }
-
-    printf("Sorted array:   ");
-    for (int i = 0; i < n; i++) printf("%d ", arr[i]);
+    double end_time = MPI_Wtime();
+    
+    printf("Sorted array:\n");
+    for (int i = 0; i < num_display; i++)
+        printf("%d ", arr[i]);
     printf("\n");
-
+    printf("Time taken for sorting: %f seconds\n", end_time - start_time);
     free(arr);
 }
 
@@ -120,8 +129,9 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    int power = atoi(argv[1]);
-    int n = 1 << power; 
+    int exp = atoi(argv[1]);
+    int n = 1 << exp; // 2^exp
+    
     if (n % size != 0) {
         if (rank == 0)
             printf("Error: array size must be divisible by number of processes\n");
@@ -129,8 +139,10 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (rank == 0)
+    if (rank == 0){
+        printf("Array size: 2^%d (%d)\n", exp, n);
         master(n, size);
+    }
     else
         worker(rank, n);
 
