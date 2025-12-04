@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
     }
     int exp = atoi(argv[1]);
     int N = 1 << exp; // 2^exp
-    printf("Array size: %d\n", N);
+    printf("Array size: 2^%d (%d)\n", exp, N);
 
     int *arr = malloc(N * sizeof(int));
     // Initialize array with random integers
