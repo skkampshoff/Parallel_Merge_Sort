@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 void merge(int *arr, int left, int mid, int right) {
     int n1 = mid - left + 1;
@@ -35,6 +36,9 @@ void merge_sort(int *arr, int left, int right) {
 }
 
 void master(int n, int size) {
+    char hname[256];
+    gethostname(hname, sizeof(hname));
+    printf("Rank 0 running on node %s\n", hname);
     int *arr = malloc(n * sizeof(int));
 
     srand(42);
@@ -91,6 +95,9 @@ void master(int n, int size) {
 }
 
 void worker(int rank, int n) {
+    char hname[256];
+    gethostname(hname, sizeof(hname));
+    printf("Rank %d running on node %s\n",rank, hname);
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
